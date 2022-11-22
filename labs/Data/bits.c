@@ -143,7 +143,7 @@ NOTES:
  *   Rating: 1
  */
 int bitXor(int x, int y) {
-  return 2;
+  return ~(~(x & (~y)) & ~((~x) & y));
 }
 /* 
  * tmin - return minimum two's complement integer 
@@ -152,8 +152,7 @@ int bitXor(int x, int y) {
  *   Rating: 1
  */
 int tmin(void) {
-
-  return 2;
+  return 1 << 31;
 
 }
 //2
@@ -165,7 +164,7 @@ int tmin(void) {
  *   Rating: 1
  */
 int isTmax(int x) {
-  return 2;
+  return !(~(x ^ (x + 1)) | !(x + 1));
 }
 /* 
  * allOddBits - return 1 if all odd-numbered bits in word set to 1
@@ -176,7 +175,7 @@ int isTmax(int x) {
  *   Rating: 2
  */
 int allOddBits(int x) {
-  return 2;
+  return !((((x >> 8) & (x >> 16) & (x >> 24) & x & (0xAA)) | (0x55)) ^ (0xFF));
 }
 /* 
  * negate - return -x 
@@ -186,7 +185,7 @@ int allOddBits(int x) {
  *   Rating: 2
  */
 int negate(int x) {
-  return 2;
+  return ~x + 1;
 }
 //3
 /* 
@@ -199,7 +198,7 @@ int negate(int x) {
  *   Rating: 3
  */
 int isAsciiDigit(int x) {
-  return 2;
+  return (!(((x ^ (0x30)) & (0xF8)) | (x >> 8)) | !(x ^ (0x38)) | !(x ^ (0x39)));
 }
 /* 
  * conditional - same as x ? y : z 
@@ -209,7 +208,9 @@ int isAsciiDigit(int x) {
  *   Rating: 3
  */
 int conditional(int x, int y, int z) {
-  return 2;
+  int a = x | ~x;
+  return z ^ ((!x + a) & (y ^ z));
+  //return ((!x + a) & y) | ((!!x + a) & z);
 }
 /* 
  * isLessOrEqual - if x <= y  then return 1, else return 0 
@@ -219,7 +220,7 @@ int conditional(int x, int y, int z) {
  *   Rating: 3
  */
 int isLessOrEqual(int x, int y) {
-  return 2;
+  return !((y + ( ~x + 1)) >> 31);
 }
 //4
 /* 
@@ -231,7 +232,7 @@ int isLessOrEqual(int x, int y) {
  *   Rating: 4 
  */
 int logicalNeg(int x) {
-  return 2;
+    return ((((~x + 1) >> 31) & 1) | ((x >> 31) & 1)) ^ 1;
 }
 /* howManyBits - return the minimum number of bits required to represent x in
  *             two's complement
@@ -246,7 +247,17 @@ int logicalNeg(int x) {
  *  Rating: 4
  */
 int howManyBits(int x) {
-  return 0;
+    // This solution is from the website.
+    // I try to comprehend it and rewrite part of the logic.
+    int n;
+    x = x ^ (x >> 31);
+    n = (!!(x >> 16)) << 4;    // from the result(0-32) which can be represent as 5 bit.
+    n += (!!(x >> (n + 8)) << 3); // so we try to calulate each of the bit one by one.
+    n += (!!(x >> (n + 4)) << 2); // if x >> 16 is nonzero then the 5th bit of the result is set to 1.
+    n += (!!(x >> (n + 2)) << 1); // the theory is that if the 5th bit is set then the lower 16bit of the input is unrelative.
+    n += !!(x >> (n + 1));        // this algorithm share some traits with the binary search.
+    n += x >> n;
+    return n + 1;
 }
 //float
 /* 
@@ -261,7 +272,21 @@ int howManyBits(int x) {
  *   Rating: 4
  */
 unsigned floatScale2(unsigned uf) {
-  return 2;
+    unsigned sign = uf >> 31;
+    unsigned exp = (uf << 1) >> 24;
+    unsigned frac = (uf << 9) >> 9; 
+    if (exp == 255) return uf;
+    if (exp > 0) {
+        exp = exp + 1;
+        if (exp == 255 && frac != 0) return uf;
+    } else {
+        if (frac >> 22 == 1) {
+            frac = (frac << 10) >> 10;
+            exp = 1;
+        }
+        frac = (frac << 1);
+    }
+    return (sign << 31) + (exp << 23) + frac;
 }
 /* 
  * floatFloat2Int - Return bit-level equivalent of expression (int) f
@@ -276,7 +301,26 @@ unsigned floatScale2(unsigned uf) {
  *   Rating: 4
  */
 int floatFloat2Int(unsigned uf) {
-  return 2;
+    int sign = uf >> 31;
+    unsigned exp = (uf << 1) >> 24;
+    unsigned frac = (uf << 9) >> 9; 
+    unsigned times, res;
+    if (sign == 0) {
+        sign = 1;
+    } else {
+        sign = -1; 
+    }
+    if (exp == 255) {
+        return 0x80000000u;
+    }
+    if (exp < 127) {
+        return 0;
+    }
+    times = exp - 127;
+    res = ((1 << 31) + (frac << 8)) >> 8;
+    if (times <= 23) return sign * (res >> (23 - times));
+    if (times > 31) return 0x80000000u;
+    return sign * (res << (times - 23));
 }
 /* 
  * floatPower2 - Return bit-level equivalent of the expression 2.0^x
@@ -292,5 +336,20 @@ int floatFloat2Int(unsigned uf) {
  *   Rating: 4
  */
 unsigned floatPower2(int x) {
-    return 2;
+    unsigned sign = 0;
+    unsigned exp = 0;
+    unsigned frac = 0;
+    unsigned times = 0;
+    if (x > 127) {
+        exp = 255;
+    }
+    if (x <= 127 && x >= -126) {
+        exp = x + 127;
+    }
+    if (x < -126 && x > -150) {
+        times = -(x + 126);
+        frac = (1u << 23u) >> times; 
+    }
+    if (x <= -150) return 0;
+    return (sign << 31) + (exp << 23) + frac;
 }
