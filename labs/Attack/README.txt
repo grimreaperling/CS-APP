@@ -25,4 +25,3 @@ can compile (use flag -Og) and disassemble it to look for gadgets.
 
 Utility program to generate byte sequences.  See documentation in lab
 handout.
-
